@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'theme.dart';
+import 'widgets.dart';
 
 class ReceivePaymentPage extends StatefulWidget {
   final String ipAddress;
@@ -16,17 +18,33 @@ class ReceivePaymentPage extends StatefulWidget {
   State<ReceivePaymentPage> createState() => _ReceivePaymentPageState();
 }
 
-class _ReceivePaymentPageState extends State<ReceivePaymentPage> {
+class _ReceivePaymentPageState extends State<ReceivePaymentPage>
+    with SingleTickerProviderStateMixin {
   late Future<Map<String, dynamic>> _paymentsFuture;
+
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
 
   @override
   void initState() {
     super.initState();
     _paymentsFuture = fetchReceivedPayments();
+    _animController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
+    _fadeAnim =
+        CurvedAnimation(parent: _animController, curve: Curves.easeOut);
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
   }
 
   Future<Map<String, dynamic>> fetchReceivedPayments() async {
-    final url = Uri.parse("http://${widget.ipAddress}:5000/untransact");
+    final url =
+        Uri.parse("http://${widget.ipAddress}:5000/untransact");
 
     final response = await http.post(
       url,
@@ -54,218 +72,256 @@ class _ReceivePaymentPageState extends State<ReceivePaymentPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF6B66E8),
+      backgroundColor: AppTheme.bg,
       body: SafeArea(
-        child: Column(
-          children: [
-            // HEADER
-            Padding(
-              padding: const EdgeInsets.only(top: 12, left: 18, right: 18),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  const SizedBox(width: 4),
-                  const Text(
-                    "Receive Payment",
-                    style: TextStyle(
-                      fontSize: 23,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Header ─────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 16, 20, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: AppTheme.textPrimary, size: 20),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                  ),
-                ],
+                    const Expanded(
+                      child: Text(
+                        'Receive Payment',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    // Server pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgCard,
+                        borderRadius: BorderRadius.circular(20),
+                        border: AppTheme.subtleBorder,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                                color: AppTheme.success,
+                                shape: BoxShape.circle),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            widget.ipAddress,
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            // BODY
-            Expanded(
-              child: FutureBuilder<Map<String, dynamic>>(
-                future: _paymentsFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+              // ── Body ───────────────────────────────────────────
+              Expanded(
+                child: FutureBuilder<Map<String, dynamic>>(
+                  future: _paymentsFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: AppTheme.primary,
+                          strokeWidth: 2.5,
+                        ),
+                      );
+                    }
 
-                  final payments = snapshot.data?['records'] ?? [];
-                  final total = snapshot.data?['total'] ?? 0;
+                    final payments =
+                        snapshot.data?['records'] as List? ?? [];
+                    final total = snapshot.data?['total'] ?? 0;
 
-                  // NO RECORDS
-                  if (payments.isEmpty) {
-                    return Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    // ── No records ──────────────────────────
+                    if (payments.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: GlassCard(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.bgElevated,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                      Icons.inbox_rounded,
+                                      size: 36,
+                                      color: AppTheme.textMuted),
+                                ),
+                                const SizedBox(height: 20),
+                                const Text('No Payments Yet',
+                                    style: AppTheme.heading3),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Waiting for incoming\ntransactions...',
+                                  textAlign: TextAlign.center,
+                                  style: AppTheme.body,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    // ── Records list ────────────────────────
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
                       children: [
-                        const SizedBox(height: 100),
-                        Container(
-                          padding: const EdgeInsets.all(34),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.07),
-                                blurRadius: 19,
-                                offset: const Offset(0, 5),
-                              )
-                            ],
-                          ),
+                        // Total received card
+                        GlassCard(
+                          padding: const EdgeInsets.all(24),
+                          border: Border.all(
+                              color: AppTheme.success.withOpacity(0.25)),
+                          shadows: AppTheme.glowGreen,
                           child: Column(
-                            children: const [
-                              Icon(Icons.sentiment_dissatisfied,
-                                  color: Colors.grey, size: 54),
-                              SizedBox(height: 16),
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color:
+                                      AppTheme.success.withOpacity(0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                    Icons.south_west_rounded,
+                                    color: AppTheme.success,
+                                    size: 28),
+                              ),
+                              const SizedBox(height: 14),
+                              const Text('Total Received',
+                                  style: AppTheme.bodySmall),
+                              const SizedBox(height: 6),
                               Text(
-                                "Sorry, No records Found",
-                                style:
-                                    TextStyle(fontSize: 18, color: Colors.black54),
+                                '₹$total',
+                                style: const TextStyle(
+                                  color: AppTheme.success,
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -1,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'from ${payments.length} payer${payments.length == 1 ? '' : 's'}',
+                                style: AppTheme.bodySmall,
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 28),
-                        Text(
-                          "Server: ${widget.ipAddress}",
-                          style:
-                              const TextStyle(fontSize: 15, color: Colors.white),
-                        ),
-                      ],
-                    );
-                  }
 
-                  // RECORD LIST
-                  return ListView(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.symmetric(vertical: 20),
-                        padding: const EdgeInsets.symmetric(vertical: 22),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(28),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
-                              blurRadius: 17,
-                              offset: const Offset(0, 6),
-                            )
-                          ],
-                          border: Border.all(color: Colors.green, width: 2),
-                        ),
-                        child: Column(
-                          children: [
-                            const Text(
-                              "Received",
-                              style: TextStyle(
-                                  fontSize: 17, fontWeight: FontWeight.w600),
-                            ),
-                            Text(
-                              "₹$total",
-                              style: const TextStyle(
-                                fontSize: 33,
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              "from ${payments.length} payers",
-                              style: const TextStyle(
-                                  fontSize: 15, color: Colors.black54),
-                            ),
-                          ],
-                        ),
-                      ),
+                        const SizedBox(height: 24),
 
-                      Text(
-                        "Server: ${widget.ipAddress}",
-                        style: const TextStyle(fontSize: 15, color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // HEADER ROW
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 4, horizontal: 14),
-                        child: const Row(
-                          children: [
-                            Expanded(
-                                child: Text("Date",
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15))),
-                            Expanded(
-                                child: Text("From",
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15))),
-                            Expanded(
-                                child: Text("Amount",
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15))),
-                          ],
-                        ),
-                      ),
-
-                      // LIST ITEMS
-                      ...payments.map((item) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 14, horizontal: 14),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom:
-                                  BorderSide(color: Colors.grey.shade300),
-                            ),
-                          ),
+                        // Table header
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 4),
                           child: Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  formatDate(item['transaction_time']),
-                                  style: const TextStyle(
-                                      fontSize: 13, color: Colors.grey),
-                                ),
-                              ),
+                                  flex: 2,
+                                  child: Text('DATE',
+                                      style: AppTheme.label)),
                               Expanded(
-                                child: Text(
-                                  item['from'],
-                                  style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                              ),
+                                  flex: 3,
+                                  child: Text('FROM',
+                                      style: AppTheme.label)),
                               Expanded(
-                                child: Text(
-                                  "₹${item['amount']}",
-                                  textAlign: TextAlign.right,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                    color: Colors.green,
-                                  ),
-                                ),
-                              ),
+                                  flex: 2,
+                                  child: Text('AMOUNT',
+                                      textAlign: TextAlign.right,
+                                      style: AppTheme.label)),
                             ],
                           ),
-                        );
-                      }).toList(),
+                        ),
+                        const SizedBox(height: 10),
 
-                      const SizedBox(height: 24),
-                    ],
-                  );
-                },
+                        // Records
+                        ...payments.map((item) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 14, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: AppTheme.bgCard,
+                              borderRadius: BorderRadius.circular(
+                                  AppTheme.radiusMd),
+                              border: AppTheme.subtleBorder,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    formatDate(item['transaction_time']),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.textMuted),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    item['from'],
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    "₹${item['amount']}",
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: AppTheme.success,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ],
+                    );
+                  },
+                ),
               ),
-            )
-          ],
+            ],
+          ),
         ),
       ),
     );
