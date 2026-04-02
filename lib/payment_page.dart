@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'theme.dart';
+import 'widgets.dart';
 
 class PaymentPage extends StatefulWidget {
   final String ipAddress;
@@ -12,14 +14,13 @@ class PaymentPage extends StatefulWidget {
   State<PaymentPage> createState() => _PaymentPageState();
 }
 
-class _PaymentPageState extends State<PaymentPage> {
-  // IP controllers
+class _PaymentPageState extends State<PaymentPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController ip1 = TextEditingController();
   final TextEditingController ip2 = TextEditingController();
   final TextEditingController ip3 = TextEditingController();
   final TextEditingController ip4 = TextEditingController();
 
-  // Username and amount
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController amountController = TextEditingController();
 
@@ -29,6 +30,9 @@ class _PaymentPageState extends State<PaymentPage> {
 
   bool isLoading = false;
   String result = '';
+
+  late AnimationController _animController;
+  late Animation<double> _fadeAnim;
 
   @override
   void initState() {
@@ -41,24 +45,44 @@ class _PaymentPageState extends State<PaymentPage> {
       ip4.text = parts[3];
     }
     _speech = stt.SpeechToText();
+    _animController = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
+    _fadeAnim =
+        CurvedAnimation(parent: _animController, curve: Curves.easeOut);
+    _animController.forward();
+  }
+
+  @override
+  void dispose() {
+    ip1.dispose();
+    ip2.dispose();
+    ip3.dispose();
+    ip4.dispose();
+    usernameController.dispose();
+    amountController.dispose();
+    _animController.dispose();
+    super.dispose();
   }
 
   void _listen() async {
     if (!_isListening) {
-      // Show Snackbar to instruct user before start listening
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please say: send/pay/transfer amount to name'),
-          duration: Duration(seconds: 3),
+        SnackBar(
+          content: const Text('Say: "send 500 to username"',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+          backgroundColor: AppTheme.primary,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
         ),
       );
-
-      // Small delay to ensure Snackbar is visible
       await Future.delayed(const Duration(seconds: 1));
 
       bool available = await _speech.initialize(
-        onStatus: (val) => print('Speech status: $val'),
-        onError: (val) => print('Speech error: $val'),
+        onStatus: (val) => debugPrint('Speech status: $val'),
+        onError: (val) => debugPrint('Speech error: $val'),
       );
       if (available) {
         setState(() => _isListening = true);
@@ -69,7 +93,7 @@ class _PaymentPageState extends State<PaymentPage> {
               _processVoiceCommand(_voiceInput);
             });
           },
-          localeId: 'en_IN', // Adjust as needed
+          localeId: 'en_IN',
           cancelOnError: true,
           listenMode: stt.ListenMode.confirmation,
         );
@@ -81,16 +105,15 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   void _processVoiceCommand(String command) {
-    final regex = RegExp(r'(pay|send|transfer)\s+(\d+)\s+(?:to|for)?\s+(\w+)', caseSensitive: false);
+    final regex = RegExp(
+        r'(pay|send|transfer)\s+(\d+)\s+(?:to|for)?\s+(\w+)',
+        caseSensitive: false);
     final match = regex.firstMatch(command);
     if (match != null) {
       final amount = match.group(2);
-      final username = match.group(3);
+      final uname = match.group(3);
       if (amount != null) amountController.text = amount;
-      if (username != null) usernameController.text = username;
-      print('Voice command parsed - Amount: $amount, Username: $username');
-    } else {
-      print('Voice command not recognized or does not match format');
+      if (uname != null) usernameController.text = uname;
     }
   }
 
@@ -108,47 +131,25 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   Future<void> submitPayment() async {
-    final username = usernameController.text.trim();
+    final uname = usernameController.text.trim();
     final amountText = amountController.text.trim();
 
     if (!validateIp()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Invalid IP address'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _showSnack('Invalid IP address', isError: true);
       return;
     }
-    if (username.isEmpty || amountText.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please fill all fields'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+    if (uname.isEmpty || amountText.isEmpty) {
+      _showSnack('Please fill all fields', isError: true);
       return;
     }
-
     final amount = double.tryParse(amountText);
     if (amount == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Invalid amount'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      _showSnack('Invalid amount', isError: true);
       return;
     }
 
     final url = Uri.parse("http://$ipAddress:5000/pay");
-    final data = {'username': username, 'amount': amount};
+    final data = {'username': uname, 'amount': amount};
 
     setState(() {
       isLoading = true;
@@ -162,56 +163,41 @@ class _PaymentPageState extends State<PaymentPage> {
         body: jsonEncode(data),
       );
       setState(() {
-        result = "Status: ${response.statusCode}\nResponse: ${response.body}";
+        result =
+            "Status: ${response.statusCode}\nResponse: ${response.body}";
       });
-
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Payment Successful!'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        _showSnack('Payment Successful! ✓', isError: false);
       }
     } catch (e) {
-      setState(() {
-        result = "Error: $e";
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      setState(() => result = "Error: $e");
+      _showSnack('Error: $e', isError: true);
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      setState(() => isLoading = false);
     }
   }
 
-  @override
-  void dispose() {
-    ip1.dispose();
-    ip2.dispose();
-    ip3.dispose();
-    ip4.dispose();
-    usernameController.dispose();
-    amountController.dispose();
-    super.dispose();
+  void _showSnack(String msg, {required bool isError}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        backgroundColor: isError ? AppTheme.danger : AppTheme.success,
+        behavior: SnackBarBehavior.floating,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   Widget _buildIpBox(TextEditingController controller) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
+      height: 48,
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        color: AppTheme.bgInput,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF2A2A2E)),
       ),
       child: TextField(
         controller: controller,
@@ -219,11 +205,12 @@ class _PaymentPageState extends State<PaymentPage> {
         maxLength: 3,
         textAlign: TextAlign.center,
         style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF1a1f36),
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: AppTheme.textPrimary,
         ),
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        cursorColor: AppTheme.primary,
         decoration: const InputDecoration(
           counterText: '',
           border: InputBorder.none,
@@ -233,235 +220,250 @@ class _PaymentPageState extends State<PaymentPage> {
     );
   }
 
-  Widget _buildInputField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF1a1f36),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FA),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
-          child: TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            inputFormatters: inputFormatters,
-            style: const TextStyle(
-              fontSize: 16,
-              color: Color(0xFF1a1f36),
-            ),
-            decoration: InputDecoration(
-              prefixIcon: Icon(icon, color: const Color(0xFF667eea)),
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-          ),
-        ),
-        child: SafeArea(
+      backgroundColor: AppTheme.bg,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnim,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with mic button and instructions
+              // ── Header ─────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.fromLTRB(8, 16, 12, 0),
                 child: Row(
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                          color: AppTheme.textPrimary, size: 20),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                    const SizedBox(width: 16),
                     const Expanded(
                       child: Text(
                         'Payment',
                         style: TextStyle(
-                          fontSize: 24,
+                          color: AppTheme.textPrimary,
+                          fontSize: 22,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          letterSpacing: -0.5,
                         ),
                       ),
                     ),
-                    FloatingActionButton(
-                      mini: true,
-                      backgroundColor: _isListening ? Colors.red : Colors.white,
-                      onPressed: _listen,
-                      child: Icon(_isListening ? Icons.mic : Icons.mic_none,
-                          color: _isListening ? Colors.white : Colors.black),
+                    // Voice mic button
+                    GestureDetector(
+                      onTap: _listen,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: _isListening
+                              ? AppTheme.danger
+                              : AppTheme.bgCard,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _isListening
+                                ? AppTheme.danger.withOpacity(0.4)
+                                : const Color(0xFF2A2A2E),
+                          ),
+                          boxShadow: _isListening
+                              ? [
+                                  BoxShadow(
+                                    color:
+                                        AppTheme.danger.withOpacity(0.4),
+                                    blurRadius: 12,
+                                    spreadRadius: -2,
+                                  )
+                                ]
+                              : null,
+                        ),
+                        child: Icon(
+                          _isListening ? Icons.mic : Icons.mic_none_rounded,
+                          color: _isListening
+                              ? Colors.white
+                              : AppTheme.textSecondary,
+                          size: 20,
+                        ),
+                      ),
                     ),
+                    const SizedBox(width: 4),
                   ],
                 ),
               ),
-              // Content card with IP, username, amount fields and submit button
+
               Expanded(
-                child: Container(
-                  margin: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 40,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Server IP Address',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1a1f36),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                child: SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── IP Address ────────────────────────────
+                      Text('SERVER IP ADDRESS', style: AppTheme.label),
+                      const SizedBox(height: 12),
+                      GlassCard(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 16),
+                        child: Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.center,
                           children: [
                             Expanded(child: _buildIpBox(ip1)),
-                            const SizedBox(width: 6),
-                            const Text(".", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF667eea))),
+                            const Text(' . ',
+                                style: TextStyle(
+                                    color: AppTheme.primary,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold)),
                             Expanded(child: _buildIpBox(ip2)),
-                            const SizedBox(width: 6),
-                            const Text(".", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF667eea))),
+                            const Text(' . ',
+                                style: TextStyle(
+                                    color: AppTheme.primary,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold)),
                             Expanded(child: _buildIpBox(ip3)),
-                            const SizedBox(width: 6),
-                            const Text(".", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF667eea))),
+                            const Text(' . ',
+                                style: TextStyle(
+                                    color: AppTheme.primary,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold)),
                             Expanded(child: _buildIpBox(ip4)),
                           ],
                         ),
-                        const SizedBox(height: 32),
-                        _buildInputField(
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ── Username ──────────────────────────────
+                      Text('USERNAME', style: AppTheme.label),
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgInput,
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                              color: const Color(0xFF2A2A2E)),
+                        ),
+                        child: TextField(
                           controller: usernameController,
-                          label: 'Username',
-                          icon: Icons.person_outline,
-                        ),
-                        const SizedBox(height: 24),
-                        _buildInputField(
-                          controller: amountController,
-                          label: 'Amount',
-                          icon: Icons.currency_rupee,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        ),
-                        const SizedBox(height: 32),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              shadowColor: Colors.transparent,
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            onPressed: isLoading ? null : submitPayment,
-                            child: Ink(
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.centerLeft,
-                                  end: Alignment.centerRight,
-                                  colors: [Color(0xFF667eea), Color(0xFF764ba2)],
-                                ),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Container(
-                                alignment: Alignment.center,
-                                child: isLoading
-                                    ? const CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 3,
-                                      )
-                                    : const Text(
-                                        'Submit Payment',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                              ),
-                            ),
+                          style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500),
+                          cursorColor: AppTheme.primary,
+                          decoration: InputDecoration(
+                            hintText: 'Recipient username',
+                            hintStyle: const TextStyle(
+                                color: AppTheme.textHint, fontSize: 15),
+                            prefixIcon: const Icon(
+                                Icons.person_outline_rounded,
+                                color: AppTheme.primary,
+                                size: 20),
+                            border: InputBorder.none,
+                            contentPadding:
+                                const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 18),
                           ),
                         ),
-                        if (result.isNotEmpty)
-                          ...[
-                            const SizedBox(height: 24),
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: result.contains('Error') ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: result.contains('Error') ? Colors.red.withOpacity(0.3) : Colors.green.withOpacity(0.3),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ── Amount ────────────────────────────────
+                      Text('AMOUNT', style: AppTheme.label),
+                      const SizedBox(height: 10),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgInput,
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                              color: const Color(0xFF2A2A2E)),
+                        ),
+                        child: TextField(
+                          controller: amountController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500),
+                          cursorColor: AppTheme.primary,
+                          decoration: InputDecoration(
+                            hintText: 'Enter amount',
+                            hintStyle: const TextStyle(
+                                color: AppTheme.textHint, fontSize: 15),
+                            prefixIcon: const Icon(
+                                Icons.currency_rupee,
+                                color: AppTheme.accent,
+                                size: 20),
+                            border: InputBorder.none,
+                            contentPadding:
+                                const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 18),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 36),
+
+                      // ── Submit ────────────────────────────────
+                      PrimaryButton(
+                        label: 'Submit Payment',
+                        isLoading: isLoading,
+                        icon: Icons.send_rounded,
+                        onTap: submitPayment,
+                      ),
+
+                      // ── Result ────────────────────────────────
+                      if (result.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: result.contains('Error')
+                                ? AppTheme.danger.withOpacity(0.08)
+                                : AppTheme.success.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(
+                                AppTheme.radiusMd),
+                            border: Border.all(
+                              color: result.contains('Error')
+                                  ? AppTheme.danger.withOpacity(0.25)
+                                  : AppTheme.success.withOpacity(0.25),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                result.contains('Error')
+                                    ? Icons.error_outline_rounded
+                                    : Icons.check_circle_outline_rounded,
+                                color: result.contains('Error')
+                                    ? AppTheme.danger
+                                    : AppTheme.success,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  result,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: result.contains('Error')
+                                        ? AppTheme.danger
+                                        : AppTheme.success,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    result.contains('Error') ? Icons.error_outline : Icons.check_circle_outline,
-                                    color: result.contains('Error') ? Colors.red : Colors.green,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      result,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: result.contains('Error') ? Colors.red : Colors.green,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
               ),
