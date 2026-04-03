@@ -8,7 +8,6 @@ DharPay is a high-fidelity, secure mobile fintech application built with Flutter
 - 🛡️ **Biometric Security**: Advanced Fingerprint and Pin authentication to keep your assets safe.
 - 💎 **Premium UI/UX**: A modern, dark-themed interface featuring glassmorphism, glowing accents, and intuitive navigation.
 - 🔍 **QR Connect**: Instantly pair with other devices or merchants for rapid offline transactions.
-- 🎙️ **Voice Interactions**: Integrated Speech-to-Text and Text-to-Speech for enhanced accessibility and hands-free control.
 - 📊 **Wallet Management**: Real-time balance tracking, multi-method top-ups, and a comprehensive transaction history.
 
 ## 🛠️ Tech Stack
