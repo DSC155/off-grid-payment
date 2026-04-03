@@ -1,7 +1,5 @@
 # DharPay: Premium Off-Grid Fintech Solution
 
-![DharPay Banner](file:///C:/Users/raj60/.gemini/antigravity/brain/85abae18-e443-48fe-a76e-8ad34ed92bcf/dharpay_banner_1775180093781.png)
-
 DharPay is a high-fidelity, secure mobile fintech application built with Flutter, designed to redefine the digital payment experience with a focus on **Off-Grid (Offline) Connectivity**. Combining a premium "Electric Violet" aesthetic with robust security features, DharPay allows users to transact even in environments with limited or no internet access.
 
 ## ✨ Key Features
